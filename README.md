@@ -10,10 +10,10 @@
 ```
 http:
   - domain: abc.com
-    host: 127.0.0.1:80
+    host: 127.0.0.1:81
 
   - domain: def.com
-    host: 127.0.0.1:81
+    host: 127.0.0.1:82
 
 
 https:

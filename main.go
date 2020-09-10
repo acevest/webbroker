@@ -213,6 +213,10 @@ func handleHTTPClient(clientConn net.Conn) {
 		line := scanner.Text()
 		buffer.WriteString(line + "\r\n")
 
+		if len(line) < 6 {
+			continue
+		}
+
 		prefix := strings.ToLower(line[:5])
 		if prefix != "host:" {
 			continue
