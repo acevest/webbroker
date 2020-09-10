@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -37,11 +38,14 @@ func getVirtualHTTPSHostAddr(host string) (string, error) {
 	return v, nil
 }
 func main() {
-	cfg, err := config.Read("./config.yaml")
+	var cfgPath string
+	flag.StringVar(&cfgPath, "config", "config.yaml", "config file path")
+	flag.Parse()
+	cfg, err := config.Read(cfgPath)
 	if err != nil {
 		log.Fatalf("read config file failed, err: %v", err)
 	}
-	fmt.Println(cfg.HTTPHosts)
+
 	for _, h := range cfg.HTTPHosts {
 		virtualHTTPHostAddr[h.Domain] = h.Host
 	}
