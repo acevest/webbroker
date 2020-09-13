@@ -144,17 +144,20 @@ func handleHTTPSClient(clientConn net.Conn) {
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-
 	go func() {
 		defer wg.Done()
+		defer hostConn.(*net.TCPConn).CloseWrite()
+		defer clientConn.(*net.TCPConn).CloseRead()
 		_, err = io.Copy(hostConn, reader)
-		log.Printf("copy from client %v to host %v. err %v", clientAddr, hostAddr, err)
+		log.Printf("copy from client %v to host %v. local %v err %v", clientAddr, hostAddr, hostConn.LocalAddr().String(), err)
 	}()
 
 	go func() {
 		defer wg.Done()
+		defer hostConn.(*net.TCPConn).CloseRead()
+		defer clientConn.(*net.TCPConn).CloseWrite()
 		_, err = io.Copy(clientConn, hostConn)
-		log.Printf("copy from host %v to client %v. err %v", hostAddr, clientAddr, err)
+		log.Printf("copy from host %v to client %v. local %v err %v", hostAddr, clientAddr, hostConn.LocalAddr().String(), err)
 	}()
 
 	wg.Wait()
@@ -263,15 +266,21 @@ func handleHTTPClient(clientConn net.Conn) {
 	// 再将余下的数据传递虚拟主机
 	go func() {
 		defer wg.Done()
+		defer hostConn.(*net.TCPConn).CloseWrite()
+		defer clientConn.(*net.TCPConn).CloseRead()
+
 		_, err = io.Copy(hostConn, io.MultiReader(buffer, clientConn))
-		log.Printf("copy from client %v to host %v. err %v", clientAddr, hostAddr, err)
+		log.Printf("copy from client %v to host %v. local %v err %v", clientAddr, hostAddr, hostConn.LocalAddr().String(), err)
 	}()
 
 	// 将虚拟主机返回的数据传递给前端
 	go func() {
 		defer wg.Done()
+		defer hostConn.(*net.TCPConn).CloseRead()
+		defer clientConn.(*net.TCPConn).CloseWrite()
+
 		_, err = io.Copy(clientConn, hostConn)
-		log.Printf("copy from host %v to client %v. err %v", hostAddr, clientAddr, err)
+		log.Printf("copy from host %v to client %v. local %v err %v", hostAddr, clientAddr, hostConn.LocalAddr().String(), err)
 	}()
 
 	wg.Wait()
