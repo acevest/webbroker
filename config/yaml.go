@@ -8,13 +8,16 @@ import (
 
 // Config config
 type Config struct {
-	HTTPHosts  []virtualHostConfig `yaml:"http"`
-	HTTPSHosts []virtualHostConfig `yaml:"https"`
+	HTTPHosts  []VirtualHostConfig `yaml:"http"`
+	HTTPSHosts []VirtualHostConfig `yaml:"https"`
 }
 
-type virtualHostConfig struct {
+// VirtualHostConfig virtual host config
+type VirtualHostConfig struct {
 	Domain string `yaml:"domain"`
 	Host   string `yaml:"host"`
+	Cert   string `yaml:"cert"`
+	Key    string `yaml:"key"`
 }
 
 // Read read config

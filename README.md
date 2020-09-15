@@ -19,4 +19,6 @@ http:
 https:
   - domain: abc.com
     host: 127.0.0.1:90
+    cert: path/cert.crt
+    key: path/key.pem
 ```

@@ -4,166 +4,119 @@ import (
 	"broker/config"
 	"bufio"
 	"bytes"
+	"crypto/rand"
 	"crypto/tls"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 )
 
-var virtualHTTPHostAddr = map[string]string{}
-var virtualHTTPSHostAddr = map[string]string{}
+var virtualHTTPHosts = map[string]config.VirtualHostConfig{}
+var virtualHTTPSHosts = map[string]config.VirtualHostConfig{}
 
 func getVirtualHTTPHostAddr(host string) (string, error) {
 	host = strings.TrimSpace(host)
-	v, ok := virtualHTTPHostAddr[host]
+	v, ok := virtualHTTPHosts[host]
 	if !ok {
 		return "", fmt.Errorf("can not find %v", host)
 	}
 
-	return v, nil
+	return v.Host, nil
 }
 
 func getVirtualHTTPSHostAddr(host string) (string, error) {
 	host = strings.TrimSpace(host)
-	v, ok := virtualHTTPSHostAddr[host]
+	v, ok := virtualHTTPSHosts[host]
 	if !ok {
 		return "", fmt.Errorf("can not find %v", host)
 	}
 
-	return v, nil
+	return v.Host, nil
 }
 func main() {
 	var cfgPath string
+	var forceHTTPS bool
 	flag.StringVar(&cfgPath, "config", "config.yaml", "config file path")
+	flag.BoolVar(&forceHTTPS, "forcehttps", true, "use https only")
 	flag.Parse()
 	cfg, err := config.Read(cfgPath)
 	if err != nil {
 		log.Fatalf("read config file failed, err: %v", err)
 	}
 
-	for _, h := range cfg.HTTPHosts {
-		virtualHTTPHostAddr[h.Domain] = h.Host
+	for _, cfg := range cfg.HTTPHosts {
+		virtualHTTPHosts[cfg.Domain] = cfg
 	}
-	for _, h := range cfg.HTTPSHosts {
-		virtualHTTPSHostAddr[h.Domain] = h.Host
+	for _, cfg := range cfg.HTTPSHosts {
+		virtualHTTPSHosts[cfg.Domain] = cfg
 	}
 
-	go httpsHandler()
-	httpHandler()
+	if forceHTTPS {
+		go httpForceHTTPS()
+	} else {
+		go httpServer()
+	}
+	httpsServer()
 }
 
-func httpsHandler() {
+func httpsServer() {
+	tlsCfg := &tls.Config{}
+	for _, cfg := range virtualHTTPSHosts {
+		cert, err := tls.LoadX509KeyPair(cfg.Cert, cfg.Key)
+		if err != nil {
+			log.Fatal(err)
+		}
+		tlsCfg.Certificates = append(tlsCfg.Certificates, cert)
+	}
+	tlsCfg.BuildNameToCertificate()
+	tlsCfg.Time = time.Now
+	tlsCfg.Rand = rand.Reader
+
 	listener, err := net.Listen("tcp", ":443")
 	if err != nil {
 		log.Fatalf("listen failed: %v", err)
 	}
 
 	for {
-		client, err := listener.Accept()
+		connp, err := listener.Accept()
 		if err != nil {
 			log.Printf("accept new client failed: %v", err)
 			continue
 		}
 
-		go handleHTTPSClient(client)
+		go func() {
+			client := tls.Server(connp, tlsCfg)
+			handleHTTPClient(client)
+		}()
 	}
+
 }
 
-type readOnlyConn struct {
-	reader io.Reader
-}
-
-func (c readOnlyConn) Read(p []byte) (int, error)         { return c.reader.Read(p) }
-func (c readOnlyConn) Write(p []byte) (int, error)        { return 0, io.ErrClosedPipe }
-func (c readOnlyConn) Close() error                       { return nil }
-func (c readOnlyConn) LocalAddr() net.Addr                { return nil }
-func (c readOnlyConn) RemoteAddr() net.Addr               { return nil }
-func (c readOnlyConn) SetDeadline(t time.Time) error      { return nil }
-func (c readOnlyConn) SetReadDeadline(t time.Time) error  { return nil }
-func (c readOnlyConn) SetWriteDeadline(t time.Time) error { return nil }
-
-func getSNI(reader io.Reader) (string, io.Reader, error) {
+func httpForceHTTPS() {
 	var err error
+	defer log.Printf("http server exited. err: ", err)
 
-	buffer := new(bytes.Buffer)
-	r := io.TeeReader(reader, buffer)
+	m := http.NewServeMux()
+	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		url := "https://" + r.Host + r.URL.Path
 
-	var hello *tls.ClientHelloInfo
-	err = tls.Server(readOnlyConn{reader: r}, &tls.Config{
-		GetConfigForClient: func(argHello *tls.ClientHelloInfo) (*tls.Config, error) {
-			hello = new(tls.ClientHelloInfo)
-			*hello = *argHello
-			return nil, nil
-		},
-	}).Handshake()
+		if len(r.URL.RawQuery) > 0 {
+			url += "?" + r.URL.RawQuery
+		}
 
-	if hello == nil {
-		return "", nil, err
-	}
-	serverName := hello.ServerName
+		http.Redirect(w, r, url, http.StatusSeeOther)
+	})
 
-	return serverName, io.MultiReader(buffer, reader), nil
+	err = http.ListenAndServe(":80", m)
 }
 
-func handleHTTPSClient(clientConn net.Conn) {
-	if clientConn == nil {
-		log.Printf("nil client")
-		return
-	}
-
-	defer clientConn.Close()
-
-	clientAddr := clientConn.RemoteAddr().String()
-	log.Printf("accept new https connection from %v", clientAddr)
-
-	host, reader, err := getSNI(clientConn)
-	if err != nil {
-		log.Printf("err: parse SNI failed: %v", err)
-		return
-	}
-
-	// 连接虚拟主机
-	hostAddr, err := getVirtualHTTPSHostAddr(host)
-	if err != nil {
-		log.Printf("err: unsupport host %v, err: %v", host, err)
-		return
-	}
-
-	hostConn, err := net.Dial("tcp", hostAddr)
-	if err != nil {
-		log.Printf("err: connect to virtual host %v[%v] failed: %v", host, hostAddr, err)
-		return
-	}
-
-	defer hostConn.Close()
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		defer hostConn.(*net.TCPConn).CloseWrite()
-		defer clientConn.(*net.TCPConn).CloseRead()
-		_, err = io.Copy(hostConn, reader)
-		log.Printf("copy from client %v to host %v. local %v err %v", clientAddr, hostAddr, hostConn.LocalAddr().String(), err)
-	}()
-
-	go func() {
-		defer wg.Done()
-		defer hostConn.(*net.TCPConn).CloseRead()
-		defer clientConn.(*net.TCPConn).CloseWrite()
-		_, err = io.Copy(clientConn, hostConn)
-		log.Printf("copy from host %v to client %v. local %v err %v", hostAddr, clientAddr, hostConn.LocalAddr().String(), err)
-	}()
-
-	wg.Wait()
-}
-
-func httpHandler() {
+func httpServer() {
 	listener, err := net.Listen("tcp", ":80")
 	if err != nil {
 		log.Fatalf("listen failed: %v", err)
@@ -199,23 +152,24 @@ func handleHTTPClient(clientConn net.Conn) {
 	const maxBufferSize = 4096
 	buffer := bytes.NewBuffer(make([]byte, 0, maxBufferSize))
 
-	// 开始解析Host
-	scanner := bufio.NewScanner(clientConn)
+	reader := bufio.NewReader(io.TeeReader(clientConn, buffer))
 
-	// 限制扫描的时候分配的缓冲区大小
-	// 如果不限制，则会使用scanner默认的缓冲区大小：MaxScanTokenSize = 64 * 1024
-	scannerBuffer := make([]byte, 256)
-	scanner.Buffer(scannerBuffer, len(scannerBuffer))
-
-	for scanner.Scan() {
+	for {
+		// 对于占用了很大缓存依旧没有分析到Host字段的请求
+		// 直接认定为异常请求
 		if buffer.Len() > maxBufferSize {
 			log.Printf("err: invalid http header, the header is too large")
 			return
 		}
 
-		line := scanner.Text()
-		buffer.WriteString(line + "\r\n")
-
+		data, _, err := reader.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				//log.Printf(">>>>>>>>>> END <<<<<<")
+				break
+			}
+		}
+		line := string(data)
 		if len(line) < 6 {
 			continue
 		}
@@ -232,6 +186,10 @@ func handleHTTPClient(clientConn net.Conn) {
 		}
 
 		host = fields[1]
+
+		// 顺便插入客户端的真实ip:port信息到http头里
+		clientIP, _, _ := net.SplitHostPort(clientAddr)
+		buffer.WriteString("X-Real-IP: " + clientIP + "\r\n")
 
 		break
 	}
@@ -257,6 +215,10 @@ func handleHTTPClient(clientConn net.Conn) {
 
 	defer hostConn.Close()
 
+	// 插入broker信息
+	localIP, _, _ := net.SplitHostPort(hostConn.LocalAddr().String())
+	buffer.WriteString("X-Forwarded-For: " + localIP + "\r\n")
+
 	// client的链接可能单方面关闭
 	// 为了避免另一方向的数据拷贝中断
 	// 将他们放进两个goroutine并等待
@@ -267,20 +229,32 @@ func handleHTTPClient(clientConn net.Conn) {
 	go func() {
 		defer wg.Done()
 		defer hostConn.(*net.TCPConn).CloseWrite()
-		defer clientConn.(*net.TCPConn).CloseRead()
+		defer func() {
+			if c, ok := clientConn.(*net.TCPConn); ok {
+				c.CloseRead()
+			}
+		}()
 
-		_, err = io.Copy(hostConn, io.MultiReader(buffer, clientConn))
-		log.Printf("copy from client %v to host %v. local %v err %v", clientAddr, hostAddr, hostConn.LocalAddr().String(), err)
+		_, err = io.Copy(hostConn, io.MultiReader(buffer, reader))
+		log.Printf("copy from client %v to host %v. local %v err %v\n", clientAddr, hostAddr, hostConn.LocalAddr().String(), err)
 	}()
 
 	// 将虚拟主机返回的数据传递给前端
 	go func() {
 		defer wg.Done()
 		defer hostConn.(*net.TCPConn).CloseRead()
-		defer clientConn.(*net.TCPConn).CloseWrite()
+		defer func() {
+			switch c := clientConn.(type) {
+			case *net.TCPConn:
+				c.CloseWrite()
+			case *tls.Conn:
+				c.CloseWrite()
+			default:
+			}
+		}()
 
 		_, err = io.Copy(clientConn, hostConn)
-		log.Printf("copy from host %v to client %v. local %v err %v", hostAddr, clientAddr, hostConn.LocalAddr().String(), err)
+		log.Printf("copy from host %v to client %v. local %v err %v\n", hostAddr, clientAddr, hostConn.LocalAddr().String(), err)
 	}()
 
 	wg.Wait()
