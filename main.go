@@ -154,8 +154,13 @@ func handleHTTPClient(clientConn net.Conn) {
 
 	// 将虚拟主机返回的数据传递给前端
 	go func() {
-		hostConn := <-chanConn
 		defer wg.Done()
+
+		hostConn := <-chanConn
+		if hostConn == nil {
+			return
+		}
+
 		defer hostConn.(*net.TCPConn).CloseRead()
 
 		defer func() {
@@ -175,12 +180,10 @@ func handleHTTPClient(clientConn net.Conn) {
 
 	// 再将余下的数据传递虚拟主机
 	go func() {
-		// 存储解析出的虚拟主机名
-		var host string
-
-		reader := bufio.NewReader(clientConn)
-
 		defer wg.Done()
+		// 通知从web服务器拷贝数据到客户端的协程退出
+		defer close(chanConn)
+
 		var hostConn net.Conn
 		defer func() {
 			if hostConn != nil {
@@ -189,12 +192,16 @@ func handleHTTPClient(clientConn net.Conn) {
 				log.Printf("host conn is nil")
 			}
 		}()
+
 		defer func() {
 			if c, ok := clientConn.(*net.TCPConn); ok {
 				c.CloseRead()
 			}
 		}()
 
+		// 存储解析出的虚拟主机名
+		var host string
+		reader := bufio.NewReader(clientConn)
 		for {
 			req, err := http.ReadRequest(reader)
 			if err != nil {
