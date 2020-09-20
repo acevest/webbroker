@@ -1,7 +1,6 @@
 package main
 
 import (
-	"broker/config"
 	"bufio"
 	"bytes"
 	"crypto/rand"
@@ -15,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"webbroker/config"
 )
 
 var virtualHTTPHosts = map[string]config.VirtualHostConfig{}
@@ -22,28 +22,43 @@ var virtualHTTPSHosts = map[string]config.VirtualHostConfig{}
 
 func getVirtualHTTPHostAddr(host string) (string, error) {
 	host = strings.TrimSpace(host)
-	v, ok := virtualHTTPHosts[host]
+	c, ok := virtualHTTPHosts[host]
 	if !ok {
+		for k, v := range virtualHTTPHosts {
+			if len(k) < len(host) {
+				if host[len(host)-len(k):] == k {
+					return v.Host, nil
+				}
+			}
+		}
 		return "", fmt.Errorf("can not find %v", host)
 	}
 
-	return v.Host, nil
+	return c.Host, nil
 }
 
 func getVirtualHTTPSHostAddr(host string) (string, error) {
 	host = strings.TrimSpace(host)
-	v, ok := virtualHTTPSHosts[host]
+	c, ok := virtualHTTPSHosts[host]
 	if !ok {
+		for k, v := range virtualHTTPSHosts {
+			if len(k) < len(host) {
+				if host[len(host)-len(k):] == k {
+					return v.Host, nil
+				}
+			}
+
+		}
 		return "", fmt.Errorf("can not find %v", host)
 	}
 
-	return v.Host, nil
+	return c.Host, nil
 }
 func main() {
 	var cfgPath string
 	var forceHTTPS bool
 	flag.StringVar(&cfgPath, "config", "config.yaml", "config file path")
-	flag.BoolVar(&forceHTTPS, "forcehttps", true, "use https only")
+	flag.BoolVar(&forceHTTPS, "forcehttps", false, "use https only")
 	flag.Parse()
 	cfg, err := config.Read(cfgPath)
 	if err != nil {
@@ -51,9 +66,11 @@ func main() {
 	}
 
 	for _, cfg := range cfg.HTTPHosts {
+		fmt.Printf("http: %v\n", cfg)
 		virtualHTTPHosts[cfg.Domain] = cfg
 	}
 	for _, cfg := range cfg.HTTPSHosts {
+		fmt.Printf("https: %v\n", cfg)
 		virtualHTTPSHosts[cfg.Domain] = cfg
 	}
 
@@ -220,7 +237,12 @@ func handleHTTPClient(clientConn net.Conn) {
 				log.Printf("host:   %v", host)
 
 				// 找出虚拟主机地址
-				hostAddr, err := getVirtualHTTPHostAddr(host)
+				var hostAddr string
+				if _, ok := clientConn.(*net.TCPConn); ok {
+					hostAddr, err = getVirtualHTTPHostAddr(host)
+				} else {
+					hostAddr, err = getVirtualHTTPSHostAddr(host)
+				}
 				if err != nil {
 					log.Printf("err: unsupport host %v, err: %v", host, err)
 					return
