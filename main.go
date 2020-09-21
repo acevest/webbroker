@@ -20,11 +20,11 @@ import (
 var virtualHTTPHosts = map[string]config.VirtualHostConfig{}
 var virtualHTTPSHosts = map[string]config.VirtualHostConfig{}
 
-func getVirtualHTTPHostAddr(host string) (string, error) {
+func getVirtualHostAddr(host string, hostCfgs map[string]config.VirtualHostConfig) (string, error) {
 	host = strings.TrimSpace(host)
-	c, ok := virtualHTTPHosts[host]
+	c, ok := hostCfgs[host]
 	if !ok {
-		for k, v := range virtualHTTPHosts {
+		for k, v := range hostCfgs {
 			if len(k) < len(host) {
 				if host[len(host)-len(k):] == k {
 					return v.Host, nil
@@ -35,25 +35,16 @@ func getVirtualHTTPHostAddr(host string) (string, error) {
 	}
 
 	return c.Host, nil
+}
+
+func getVirtualHTTPHostAddr(host string) (string, error) {
+	return getVirtualHostAddr(host, virtualHTTPHosts)
 }
 
 func getVirtualHTTPSHostAddr(host string) (string, error) {
-	host = strings.TrimSpace(host)
-	c, ok := virtualHTTPSHosts[host]
-	if !ok {
-		for k, v := range virtualHTTPSHosts {
-			if len(k) < len(host) {
-				if host[len(host)-len(k):] == k {
-					return v.Host, nil
-				}
-			}
-
-		}
-		return "", fmt.Errorf("can not find %v", host)
-	}
-
-	return c.Host, nil
+	return getVirtualHostAddr(host, virtualHTTPSHosts)
 }
+
 func main() {
 	var cfgPath string
 	var forceHTTPS bool
@@ -117,7 +108,7 @@ func httpsServer() {
 
 func httpForceHTTPS() {
 	var err error
-	defer log.Printf("http server exited. err: ", err)
+	defer log.Printf("http server exited. err: %v", err)
 
 	m := http.NewServeMux()
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
