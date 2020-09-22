@@ -48,7 +48,7 @@ func getVirtualHTTPSHostAddr(host string) (string, error) {
 func main() {
 	var cfgPath string
 	var forceHTTPS bool
-	flag.StringVar(&cfgPath, "config", "config.yaml", "config file path")
+	flag.StringVar(&cfgPath, "c", "config.yaml", "config file path")
 	flag.BoolVar(&forceHTTPS, "forcehttps", false, "use https only")
 	flag.Parse()
 	cfg, err := config.Read(cfgPath)
