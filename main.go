@@ -182,8 +182,8 @@ func handleHTTPClient(clientConn net.Conn) {
 		}()
 
 		_, err = io.Copy(clientConn, hostConn)
-		hostAddr := hostConn.LocalAddr().String()
-		log.Printf("copy from host %v to client %v. local %v err %v\n", hostAddr, clientAddr, hostConn.LocalAddr().String(), err)
+		//hostAddr := hostConn.LocalAddr().String()
+		log.Printf("copy from server %v to client %v. local %v err %v\n", hostConn.RemoteAddr(), clientAddr, hostConn.LocalAddr().String(), err)
 	}()
 
 	// 再将余下的数据传递虚拟主机
@@ -220,6 +220,7 @@ func handleHTTPClient(clientConn net.Conn) {
 
 				break
 			}
+			fmt.Println(req)
 
 			const maxBufferSize = 4096
 			buffer := bytes.NewBuffer(make([]byte, 0, maxBufferSize))
@@ -264,7 +265,13 @@ func handleHTTPClient(clientConn net.Conn) {
 			req.Write(buffer)
 
 			_, err = io.Copy(hostConn, buffer)
-			log.Printf("copy from client %v to host %v. local %v err %v\n", clientAddr, "", hostConn.LocalAddr().String(), err)
+			log.Printf("copy from client %v to server %v. local %v err %v\n", clientAddr, hostConn.RemoteAddr().String(), hostConn.LocalAddr().String(), err)
+			if req.Header.Get("Upgrade") == "websocket" {
+				log.Printf("begin to copy websocket data from client %v to server %v.", clientAddr, hostConn.RemoteAddr().String())
+				_, err = io.Copy(hostConn, reader)
+				log.Printf("copy websocket from client %v to server %v. local %v err %v\n", clientAddr, hostConn.RemoteAddr().String(), hostConn.LocalAddr().String(), err)
+				break
+			}
 		}
 
 	}()
