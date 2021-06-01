@@ -11,39 +11,10 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 	"webbroker/config"
 )
-
-var virtualHTTPHosts = map[string]config.VirtualHostConfig{}
-var virtualHTTPSHosts = map[string]config.VirtualHostConfig{}
-
-func getVirtualHostAddr(host string, hostCfgs map[string]config.VirtualHostConfig) (string, error) {
-	host = strings.TrimSpace(host)
-	c, ok := hostCfgs[host]
-	if !ok {
-		for k, v := range hostCfgs {
-			if len(k) < len(host) {
-				if host[len(host)-len(k):] == k {
-					return v.Host, nil
-				}
-			}
-		}
-		return "", fmt.Errorf("can not find %v", host)
-	}
-
-	return c.Host, nil
-}
-
-func getVirtualHTTPHostAddr(host string) (string, error) {
-	return getVirtualHostAddr(host, virtualHTTPHosts)
-}
-
-func getVirtualHTTPSHostAddr(host string) (string, error) {
-	return getVirtualHostAddr(host, virtualHTTPSHosts)
-}
 
 func main() {
 	var cfgPath string
@@ -51,18 +22,9 @@ func main() {
 	flag.StringVar(&cfgPath, "c", "config.yaml", "config file path")
 	flag.BoolVar(&forceHTTPS, "forcehttps", false, "use https only")
 	flag.Parse()
-	cfg, err := config.Read(cfgPath)
+	err := config.Read(cfgPath)
 	if err != nil {
 		log.Fatalf("read config file failed, err: %v", err)
-	}
-
-	for _, cfg := range cfg.HTTPHosts {
-		fmt.Printf("http: %v\n", cfg)
-		virtualHTTPHosts[cfg.Domain] = cfg
-	}
-	for _, cfg := range cfg.HTTPSHosts {
-		fmt.Printf("https: %v\n", cfg)
-		virtualHTTPSHosts[cfg.Domain] = cfg
 	}
 
 	if forceHTTPS {
@@ -75,7 +37,7 @@ func main() {
 
 func httpsServer() {
 	tlsCfg := &tls.Config{}
-	for _, cfg := range virtualHTTPSHosts {
+	for _, cfg := range config.GetAllHTTPSServer() {
 		cert, err := tls.LoadX509KeyPair(cfg.Cert, cfg.Key)
 		if err != nil {
 			log.Fatal(err)
@@ -231,9 +193,9 @@ func handleHTTPClient(clientConn net.Conn) {
 				// 找出虚拟主机地址
 				var hostAddr string
 				if _, ok := clientConn.(*net.TCPConn); ok {
-					hostAddr, err = getVirtualHTTPHostAddr(host)
+					hostAddr, err = config.GetVirtualHTTPServerAddr(host)
 				} else {
-					hostAddr, err = getVirtualHTTPSHostAddr(host)
+					hostAddr, err = config.GetVirtualHTTPSServerAddr(host)
 				}
 				if err != nil {
 					log.Printf("err: unsupport host %v, err: %v", host, err)
