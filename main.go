@@ -29,10 +29,9 @@ func main() {
 
 	if forceHTTPS {
 		go httpForceHTTPS()
-	} else {
-		go httpServer()
 	}
-	httpsServer()
+
+  httpServer(config.IP + ":" + config.Port)
 }
 
 func httpsServer() {
@@ -86,8 +85,9 @@ func httpForceHTTPS() {
 	err = http.ListenAndServe(":80", m)
 }
 
-func httpServer() {
-	listener, err := net.Listen("tcp", ":80")
+func httpServer(addr string) {
+  log.Printf("http server listen at: %v", addr)
+	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatalf("listen failed: %v", err)
 	}

@@ -55,7 +55,20 @@ func GetAllHTTPSServer() []VirtualServerConfig {
 	return s
 }
 
+
+var IP string
+var Port string
+
 func buildConfig(cfg *Config) {
+
+  if cfg.General.Port == "" {
+    log.Printf("fuck port empty")
+    Port = "80"
+  } else {
+    Port = cfg.General.Port
+  }
+
+  IP = cfg.General.IP
 
 	for _, cfg := range cfg.General.Hosts {
 		fmt.Printf("general host %s = %s ", cfg.Name, cfg.Value)

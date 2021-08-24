@@ -18,6 +18,8 @@ type Config struct {
 
 //
 type GeneralConfig struct {
+  IP string `yaml:"ip"`
+  Port string `yaml:"port"`
 	Hosts []KeyValue `yaml:"hosts"`
 	Ports []KeyValue `yaml:"ports"`
 }
