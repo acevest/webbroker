@@ -58,8 +58,10 @@ func GetAllHTTPSServer() []VirtualServerConfig {
 
 var IP string
 var Port string
+var CertsPath string
 
 func buildConfig(cfg *Config) {
+  CertsPath = cfg.General.CertsPath
 
   if cfg.General.Port == "" {
     log.Printf("fuck port empty")

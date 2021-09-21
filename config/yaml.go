@@ -18,6 +18,7 @@ type Config struct {
 
 //
 type GeneralConfig struct {
+  CertsPath string `yaml:"certspath"`
   IP string `yaml:"ip"`
   Port string `yaml:"port"`
 	Hosts []KeyValue `yaml:"hosts"`

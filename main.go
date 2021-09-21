@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"path"
 	"sync"
 	"time"
 	"webbroker/config"
@@ -31,13 +32,17 @@ func main() {
 		go httpForceHTTPS()
 	}
 
+	go httpsServer()
   httpServer(config.IP + ":" + config.Port)
 }
 
 func httpsServer() {
 	tlsCfg := &tls.Config{}
 	for _, cfg := range config.GetAllHTTPSServer() {
-		cert, err := tls.LoadX509KeyPair(cfg.Cert, cfg.Key)
+		certPath := path.Join(config.CertsPath,"1_" + cfg.Domain + "_bundle.crt")
+		keyPath := path.Join(config.CertsPath, "2_" + cfg.Domain + ".key")
+		log.Printf("%v %v\n", certPath, keyPath)
+		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 		if err != nil {
 			log.Fatal(err)
 		}
