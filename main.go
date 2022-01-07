@@ -33,14 +33,19 @@ func main() {
 	}
 
 	go httpsServer()
-  httpServer(config.IP + ":" + config.Port)
+
+	if config.SecurePort != "" {
+		go httpServer(config.IP+":"+config.SecurePort, true)
+	}
+
+	httpServer(config.IP+":"+config.Port, false)
 }
 
 func httpsServer() {
 	tlsCfg := &tls.Config{}
 	for _, cfg := range config.GetAllHTTPSServer() {
-		certPath := path.Join(config.CertsPath,"1_" + cfg.Domain + "_bundle.crt")
-		keyPath := path.Join(config.CertsPath, "2_" + cfg.Domain + ".key")
+		certPath := path.Join(config.CertsPath, "1_"+cfg.Domain+"_bundle.crt")
+		keyPath := path.Join(config.CertsPath, "2_"+cfg.Domain+".key")
 		log.Printf("%v %v\n", certPath, keyPath)
 		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 		if err != nil {
@@ -90,8 +95,8 @@ func httpForceHTTPS() {
 	err = http.ListenAndServe(":80", m)
 }
 
-func httpServer(addr string) {
-  log.Printf("http server listen at: %v", addr)
+func httpServer(addr string, secure bool) {
+	log.Printf("http server listen at: %v", addr)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatalf("listen failed: %v", err)
@@ -99,6 +104,11 @@ func httpServer(addr string) {
 
 	for {
 		client, err := listener.Accept()
+		if secure {
+			client = &SecureConn{client}
+		}
+		// a := SecureConn{client}
+		// log.Printf("a %v", a.LocalAddr())
 		if err != nil {
 			log.Printf("accept new client failed: %v", err)
 			continue
@@ -197,10 +207,11 @@ func handleHTTPClient(clientConn net.Conn) {
 
 				// 找出虚拟主机地址
 				var hostAddr string
+				var secureMode bool
 				if _, ok := clientConn.(*net.TCPConn); ok {
-					hostAddr, err = config.GetVirtualHTTPServerAddr(host)
+					hostAddr, secureMode, err = config.GetVirtualHTTPServerAddr(host)
 				} else {
-					hostAddr, err = config.GetVirtualHTTPSServerAddr(host)
+					hostAddr, secureMode, err = config.GetVirtualHTTPSServerAddr(host)
 				}
 				if err != nil {
 					log.Printf("err: unsupport host %v, err: %v", host, err)
@@ -212,6 +223,10 @@ func handleHTTPClient(clientConn net.Conn) {
 				if err != nil {
 					log.Printf("err: connect to virtual host %v[%v] failed: %v", host, hostAddr, err)
 					return
+				}
+
+				if secureMode {
+					hostConn = &SecureConn{hostConn}
 				}
 
 				chanConn <- hostConn

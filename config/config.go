@@ -21,29 +21,37 @@ var name2port = map[string]string{}
 var virtualHTTPServers = map[string]VirtualServerConfig{}
 var virtualHTTPSServers = map[string]VirtualServerConfig{}
 
-func getVirtualServerAddr(host string, hostCfgs map[string]VirtualServerConfig) (string, error) {
+func getVirtualServerConfig(host string, hostCfgs map[string]VirtualServerConfig) (*VirtualServerConfig, error) {
 	host = strings.TrimSpace(host)
 	c, ok := hostCfgs[host]
 	if !ok {
 		for k, v := range hostCfgs {
 			if len(k) < len(host) {
 				if host[len(host)-len(k):] == k {
-					return v.Addr(), nil
+					return &v, nil
 				}
 			}
 		}
-		return "", fmt.Errorf("can not find %v", host)
+		return nil, fmt.Errorf("can not find %v", host)
 	}
 
-	return c.Addr(), nil
+	return &c, nil
 }
 
-func GetVirtualHTTPServerAddr(host string) (string, error) {
-	return getVirtualServerAddr(host, virtualHTTPServers)
+func GetVirtualHTTPServerAddr(host string) (string, bool, error) {
+	cfg, err := getVirtualServerConfig(host, virtualHTTPServers)
+	if cfg == nil || err != nil {
+		return "", false, err
+	}
+	return cfg.Addr(), cfg.SecureMode, err
 }
 
-func GetVirtualHTTPSServerAddr(host string) (string, error) {
-	return getVirtualServerAddr(host, virtualHTTPSServers)
+func GetVirtualHTTPSServerAddr(host string) (string, bool, error) {
+	cfg, err := getVirtualServerConfig(host, virtualHTTPSServers)
+	if cfg == nil || err != nil {
+		return "", false, err
+	}
+	return cfg.Addr(), cfg.SecureMode, err
 }
 
 func GetAllHTTPSServer() []VirtualServerConfig {
@@ -55,22 +63,23 @@ func GetAllHTTPSServer() []VirtualServerConfig {
 	return s
 }
 
-
 var IP string
 var Port string
+var SecurePort string
 var CertsPath string
 
 func buildConfig(cfg *Config) {
-  CertsPath = cfg.General.CertsPath
+	CertsPath = cfg.General.CertsPath
 
-  if cfg.General.Port == "" {
-    log.Printf("fuck port empty")
-    Port = "80"
-  } else {
-    Port = cfg.General.Port
-  }
+	if cfg.General.Port == "" {
+		log.Printf("fuck port empty")
+		Port = "80"
+	} else {
+		Port = cfg.General.Port
+	}
 
-  IP = cfg.General.IP
+	IP = cfg.General.IP
+	SecurePort = cfg.General.SecurePort
 
 	for _, cfg := range cfg.General.Hosts {
 		fmt.Printf("general host %s = %s ", cfg.Name, cfg.Value)

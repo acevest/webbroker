@@ -18,11 +18,12 @@ type Config struct {
 
 //
 type GeneralConfig struct {
-  CertsPath string `yaml:"certspath"`
-  IP string `yaml:"ip"`
-  Port string `yaml:"port"`
-	Hosts []KeyValue `yaml:"hosts"`
-	Ports []KeyValue `yaml:"ports"`
+	CertsPath  string     `yaml:"certspath"`
+	IP         string     `yaml:"ip"`
+	Port       string     `yaml:"port"`
+	SecurePort string     `yaml:"secureport"`
+	Hosts      []KeyValue `yaml:"hosts"`
+	Ports      []KeyValue `yaml:"ports"`
 }
 
 type KeyValue struct {
@@ -32,11 +33,12 @@ type KeyValue struct {
 
 // VirtualServerConfig virtual host config
 type VirtualServerConfig struct {
-	Domain string `yaml:"domain"`
-	Host   string `yaml:"host"`
-	Port   string `yaml:"port"`
-	Cert   string `yaml:"cert"`
-	Key    string `yaml:"key"`
+	Domain     string `yaml:"domain"`
+	Host       string `yaml:"host"`
+	Port       string `yaml:"port"`
+	Cert       string `yaml:"cert"`
+	Key        string `yaml:"key"`
+	SecureMode bool   `yaml:"securemode"`
 }
 
 func (c *VirtualServerConfig) Addr() string {
