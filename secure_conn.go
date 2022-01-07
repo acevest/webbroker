@@ -16,6 +16,7 @@ import (
 
 type SecureConn struct {
 	net.Conn
+	SecureMode bool
 }
 
 func norByteSlice(b []byte) {
@@ -29,15 +30,23 @@ func norByteSlice(b []byte) {
 
 func (s *SecureConn) Read(b []byte) (n int, err error) {
 	n, err = s.Conn.Read(b)
-	norByteSlice(b)
-	log.Printf("secure read %v bytes err %v", n, err)
+	if s.SecureMode {
+		norByteSlice(b)
+		log.Printf("secure read %v bytes err %v", n, err)
+	}
 	return n, err
 }
 
 func (s *SecureConn) Write(b []byte) (n int, err error) {
-	norByteSlice(b)
+	if s.SecureMode {
+		norByteSlice(b)
+	}
+
 	n, err = s.Conn.Write(b)
-	log.Printf("secure write %v bytes err %v", n, err)
+
+	if s.SecureMode {
+		log.Printf("secure write %v bytes err %v", n, err)
+	}
 	return n, err
 }
 

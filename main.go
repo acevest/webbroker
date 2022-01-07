@@ -104,9 +104,8 @@ func httpServer(addr string, secure bool) {
 
 	for {
 		client, err := listener.Accept()
-		if secure {
-			client = &SecureConn{client}
-		}
+		client = &SecureConn{client, secure}
+
 		// a := SecureConn{client}
 		// log.Printf("a %v", a.LocalAddr())
 		if err != nil {
@@ -225,9 +224,7 @@ func handleHTTPClient(clientConn net.Conn) {
 					return
 				}
 
-				if secureMode {
-					hostConn = &SecureConn{hostConn}
-				}
+				hostConn = &SecureConn{hostConn, secureMode}
 
 				chanConn <- hostConn
 			}
