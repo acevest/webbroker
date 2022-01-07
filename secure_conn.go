@@ -49,6 +49,14 @@ func (s *SecureConn) CloseRead() error {
 	}
 }
 
+func (s *SecureConn) CloseWrite() error {
+	if x, ok := s.Conn.(*net.TCPConn); ok {
+		return x.CloseWrite()
+	} else {
+		panic("not tcp conn")
+	}
+}
+
 // type Conn interface {
 // 	// Read reads data from the connection.
 // 	// Read can be made to time out and return an error after a fixed

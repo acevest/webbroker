@@ -146,11 +146,11 @@ func handleHTTPClient(clientConn net.Conn) {
 			return
 		}
 
-		defer hostConn.(CloseReader).CloseRead()
+		defer hostConn.(Closer).CloseRead()
 
 		defer func() {
 			switch c := clientConn.(type) {
-			case *net.TCPConn:
+			case Closer:
 				c.CloseWrite()
 			case *tls.Conn:
 				c.CloseWrite()
@@ -172,14 +172,14 @@ func handleHTTPClient(clientConn net.Conn) {
 		var hostConn net.Conn
 		defer func() {
 			if hostConn != nil {
-				hostConn.(*net.TCPConn).CloseWrite()
+				hostConn.(Closer).CloseWrite()
 			} else {
 				log.Printf("host conn is nil")
 			}
 		}()
 
 		defer func() {
-			if c, ok := clientConn.(*net.TCPConn); ok {
+			if c, ok := clientConn.(Closer); ok {
 				c.CloseRead()
 			}
 		}()
