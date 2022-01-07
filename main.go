@@ -146,7 +146,7 @@ func handleHTTPClient(clientConn net.Conn) {
 			return
 		}
 
-		defer hostConn.(*net.TCPConn).CloseRead()
+		defer hostConn.(CloseReader).CloseRead()
 
 		defer func() {
 			switch c := clientConn.(type) {

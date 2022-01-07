@@ -80,6 +80,7 @@ func buildConfig(cfg *Config) {
 
 	IP = cfg.General.IP
 	SecurePort = cfg.General.SecurePort
+	log.Printf("secure port: %v", SecurePort)
 
 	for _, cfg := range cfg.General.Hosts {
 		fmt.Printf("general host %s = %s ", cfg.Name, cfg.Value)
