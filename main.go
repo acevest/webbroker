@@ -208,7 +208,7 @@ func handleHTTPClient(clientConn net.Conn) {
 				// 找出虚拟主机地址
 				var hostAddr string
 				var secureMode bool
-				if _, ok := clientConn.(*net.TCPConn); ok {
+				if _, ok := clientConn.(*tls.Conn); ok {
 					hostAddr, secureMode, err = config.GetVirtualHTTPSServerAddr(host)
 				} else {
 					hostAddr, secureMode, err = config.GetVirtualHTTPServerAddr(host)
