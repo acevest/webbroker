@@ -93,6 +93,7 @@ func httpForceHTTPS() {
 	})
 
 	err = http.ListenAndServe(":80", m)
+	log.Printf("http force https, err: %v", err)
 }
 
 func httpServer(addr string, secure bool) {
@@ -208,9 +209,9 @@ func handleHTTPClient(clientConn net.Conn) {
 				var hostAddr string
 				var secureMode bool
 				if _, ok := clientConn.(*net.TCPConn); ok {
-					hostAddr, secureMode, err = config.GetVirtualHTTPServerAddr(host)
-				} else {
 					hostAddr, secureMode, err = config.GetVirtualHTTPSServerAddr(host)
+				} else {
+					hostAddr, secureMode, err = config.GetVirtualHTTPServerAddr(host)
 				}
 				if err != nil {
 					log.Printf("err: unsupport host %v, err: %v", host, err)
