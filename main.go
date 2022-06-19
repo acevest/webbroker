@@ -44,15 +44,15 @@ func main() {
 func httpsServer() {
 	tlsCfg := &tls.Config{}
 	for _, cfg := range config.GetAllHTTPSServer() {
-		certPath := path.Join(config.CertsPath, "1_"+cfg.Domain+"_bundle.crt")
-		keyPath := path.Join(config.CertsPath, "2_"+cfg.Domain+".key")
+		certPath := path.Join(config.CertsPath, cfg.Domain+"_bundle.crt")
+		keyPath := path.Join(config.CertsPath, cfg.Domain+".key")
 		log.Printf("%v %v\n", certPath, keyPath)
 		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 		if err != nil {
 			log.Printf("ERR: %v\n", err)
 
-			certPath = path.Join(config.CertsPath, cfg.Domain+"_bundle.crt")
-			keyPath = path.Join(config.CertsPath, cfg.Domain+".key")
+			certPath = path.Join(config.CertsPath, "1_"+cfg.Domain+"_bundle.crt")
+			keyPath = path.Join(config.CertsPath, "2_"+cfg.Domain+".key")
 			log.Printf("%v %v\n", certPath, keyPath)
 			cert, err = tls.LoadX509KeyPair(certPath, keyPath)
 			if err != nil {
