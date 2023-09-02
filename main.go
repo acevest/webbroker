@@ -19,6 +19,29 @@ import (
 
 func main() {
 	var cfgPath string
+	flag.StringVar(&cfgPath, "c", "config.yaml", "config file path")
+	flag.Parse()
+	err := config.Read(cfgPath)
+	if err != nil {
+		log.Fatalf("read config file failed, err: %v", err)
+	}
+
+	httpsServer()
+}
+
+
+
+func httpPortServer() {
+    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        fmt.Fprintf(w, "Hello, World!")
+    })
+
+    log.Fatal(http.ListenAndServe(":80", nil))
+}
+
+/*
+func main() {
+	var cfgPath string
 	var forceHTTPS bool
 	flag.StringVar(&cfgPath, "c", "config.yaml", "config file path")
 	flag.BoolVar(&forceHTTPS, "forcehttps", false, "use https only")
@@ -34,6 +57,9 @@ func main() {
 
 	go httpsServer()
 
+
+	httpPortServer()
+
 	if config.SecurePort != "" {
 		go httpServer(config.IP+":"+config.SecurePort, true)
 	}
@@ -41,6 +67,7 @@ func main() {
 	httpServer(config.IP+":"+config.Port, false)
 }
 
+*/
 func httpsServer() {
 	tlsCfg := &tls.Config{}
 	for _, cfg := range config.GetAllHTTPSServer() {
