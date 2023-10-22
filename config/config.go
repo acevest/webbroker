@@ -24,7 +24,7 @@ var virtualHTTPSServers = map[string]VirtualServerConfig{}
 func GetVirtualHTTPServerAddr(host, path string) (*VirtualServerConfig, error) {
 	host = strings.TrimSpace(host)
 	var cfg *VirtualServerConfig
-	for _, c := range conf.HTTPServers {
+	for _, c := range Conf.HTTPServers {
 		log.Printf("http: %v\n", c)
 		log.Printf("a:%v b:%v c:%v d:%v", host, path, c.Domain, c.Prefix)
 		if host == c.Domain && len(c.Prefix) == 0 {
@@ -44,7 +44,7 @@ func GetVirtualHTTPServerAddr(host, path string) (*VirtualServerConfig, error) {
 func GetVirtualHTTPSServerAddr(host, path string) (*VirtualServerConfig, error) {
 	host = strings.TrimSpace(host)
 	var cfg VirtualServerConfig
-	for _, c := range conf.HTTPSServers {
+	for _, c := range Conf.HTTPSServers {
 		log.Printf("http: %v\n", c)
 		log.Printf("a:%v b:%v c:%v d:%v %v", host, path, c.Domain, c.Prefix, len(c.Prefix))
 		if host == c.Domain && len(c.Prefix) == 0 {
@@ -93,13 +93,19 @@ func buildConfig(cfg *Config) {
 	log.Printf("secure port: %v", SecurePort)
 
 	for _, cfg := range cfg.General.Hosts {
-		fmt.Printf("general host %s = %s ", cfg.Name, cfg.Value)
+		fmt.Printf("general host %s = %s\n", cfg.Name, cfg.Value)
 		name2host[cfg.Name] = cfg.Value
 	}
 
 	for _, cfg := range cfg.General.Ports {
-		fmt.Printf("general port %s = %s ", cfg.Name, cfg.Value)
+		fmt.Printf("general port %s = %s\n", cfg.Name, cfg.Value)
 		name2port[cfg.Name] = cfg.Value
+	}
+
+	for i, c := range Conf.HTTPSServers {
+		if v, ok := name2port[c.Port]; ok {
+			Conf.HTTPSServers[i].Port = v
+		}
 	}
 
 	for _, cfg := range cfg.HTTPServers {
@@ -112,4 +118,3 @@ func buildConfig(cfg *Config) {
 	}
 
 }
-

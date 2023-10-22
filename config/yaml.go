@@ -64,7 +64,7 @@ func (c *VirtualServerConfig) Addr() string {
 	return host + ":" + port
 }
 
-var conf = &Config{}
+var Conf = Config{}
 
 // Read read config
 func Read(path string) error {
@@ -75,11 +75,11 @@ func Read(path string) error {
 		return err
 	}
 
-	yaml.NewDecoder(fd).Decode(conf)
-	log.Printf("%v", conf)
+	yaml.NewDecoder(fd).Decode(&Conf)
 
-	buildConfig(conf)
+	buildConfig(&Conf)
+
+	log.Printf("%v", Conf)
 
 	return nil
 }
-

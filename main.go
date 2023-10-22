@@ -11,11 +11,12 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"path"
+	"strings"
 	"sync"
 	"time"
 	"webbroker/config"
-	"strings"
 )
 
 func main() {
@@ -30,46 +31,192 @@ func main() {
 	httpsServer()
 }
 
+type xHost struct {
+	target *url.URL
+	prefix string
+	host   string
+	port   string
+}
+type proxy struct {
+	targets map[string]xHost
+}
 
+func newProxy() *proxy {
+	return &proxy{
+		targets: make(map[string]xHost),
+	}
+}
+
+func (p *proxy) addConfig() {
+	for _, c := range config.Conf.HTTPSServers {
+		log.Printf(">>>>> http: %v\n", c)
+		log.Printf(">>>>>> domain:%v host %v port %v prefix:%v len: %v", c.Domain, c.Host, c.Port, c.Prefix, len(c.Prefix))
+
+		p.addTarget(c.Domain, c.Prefix, c.Host, c.Port)
+	}
+}
+
+func (p *proxy) addTarget(domain, prefix, host, port string) error {
+
+	key := fmt.Sprintf("%v%v", domain, prefix)
+	if len(prefix) == 0 {
+		key = fmt.Sprintf("%v%v", domain, "/")
+	}
+	targetURL, _ := url.Parse(fmt.Sprintf("http://%v:%v", host, port))
+
+	log.Printf("add key %v target %v", key, targetURL)
+	p.targets[key] = xHost{
+		target: targetURL,
+		prefix: prefix,
+		host:   host,
+		port:   port,
+	}
+	return nil
+}
+
+// func (p *proxy) addTarget(path, target string) error {
+// 	targetURL, err := url.Parse(target)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	p.targets[path] = targetURL
+// 	return nil
+// }
+
+func commonPrefixLength(s1, s2 string) int {
+	length := 0
+	for i := 0; i < len(s1) && i < len(s2); i++ {
+		if s1[i] == s2[i] {
+			length++
+		} else {
+			break
+		}
+	}
+	return length
+}
+
+func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// var target *url.URL
+
+	// if strings.HasPrefix(r.URL.Path, "/bbb") {
+	// 	target = p.targets["/bbb"]
+	// } else {
+	// 	target = p.targets["default"]
+	// }
+
+	log.Printf("req host %v url %v ", r.Host, r.URL.Path)
+	url := r.Host + r.URL.Path
+	maxPrefixLen := 0
+	var target xHost
+	var found bool
+	for k, v := range p.targets {
+		log.Printf("DD: %v", k)
+		prefixLen := commonPrefixLength(url, k)
+		log.Printf("%v %v prefix len %v", url, k, prefixLen)
+		if prefixLen == 0 {
+			continue
+		}
+
+		// if prefixLen == maxPrefixLen {
+		// 	log.Fatalf("prefix len == max prefix len %v %v", url, k)
+		// }
+
+		if prefixLen > maxPrefixLen {
+			maxPrefixLen = prefixLen
+			target = v
+			found = true
+			log.Printf("req host %v url %v find %v", r.Host, r.URL.Path, v)
+		} else {
+			log.Printf("fucked")
+		}
+	}
+
+	if !found {
+		log.Printf("dasfsadfasdfs")
+		return
+	}
+
+	log.Printf("result %v", target.target)
+
+	log.Printf("xxx %v", r.URL.Path)
+	r.URL.Path = strings.TrimLeft(r.URL.Path, target.prefix)
+	if !strings.HasPrefix(r.URL.Path, "/") {
+		r.URL.Path = "/" + r.URL.Path
+	}
+	log.Printf("xxx %v", r.URL.Path)
+	r.URL.Host = target.target.Host
+	r.URL.Scheme = target.target.Scheme
+	r.Host = target.target.Host
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	resp, err := http.DefaultTransport.RoundTrip(r)
+	if err != nil {
+		http.Error(w, "Error making request", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+	for key, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+}
+
+func httpsServer() {
+	var err error
+	proxy := newProxy()
+
+	// err = proxy.addTarget("default", "http://localhost:20000")
+	// if err != nil {
+	// 	log.Println("Error adding target:", err)
+	// 	return
+	// }
+	proxy.addConfig()
+
+	certificates := make(map[string]tls.Certificate)
+	for _, cfg := range config.GetAllHTTPSServer() {
+		certPath := path.Join(config.CertsPath, cfg.Domain+"_bundle.crt")
+		keyPath := path.Join(config.CertsPath, cfg.Domain+".key")
+		certificates[cfg.Domain], err = tls.LoadX509KeyPair(certPath, keyPath)
+		log.Printf("load %v %v", certPath, keyPath)
+		if err != nil {
+			log.Fatalf("load certificates failed %v", err)
+		}
+
+	}
+
+	server := &http.Server{
+		Addr:    ":443",
+		Handler: proxy,
+		TLSConfig: &tls.Config{
+			GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				cert, ok := certificates[hello.ServerName]
+				if !ok {
+					return nil, fmt.Errorf("no certificate for domain: %s", hello.ServerName)
+				}
+				return &cert, nil
+			},
+		},
+	}
+
+	log.Println("Starting HTTPS proxy server on port 443")
+
+	err = server.ListenAndServeTLS("", "")
+	if err != nil {
+		log.Println("Error starting server:", err)
+	}
+}
 
 func httpPortServer() {
-    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-        fmt.Fprintf(w, "Hello, World!")
-    })
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Hello, World!")
+	})
 
-    log.Fatal(http.ListenAndServe(":80", nil))
+	log.Fatal(http.ListenAndServe(":80", nil))
 }
 
-/*
-func main() {
-	var cfgPath string
-	var forceHTTPS bool
-	flag.StringVar(&cfgPath, "c", "config.yaml", "config file path")
-	flag.BoolVar(&forceHTTPS, "forcehttps", false, "use https only")
-	flag.Parse()
-	err := config.Read(cfgPath)
-	if err != nil {
-		log.Fatalf("read config file failed, err: %v", err)
-	}
-
-	if forceHTTPS {
-		go httpForceHTTPS()
-	}
-
-	go httpsServer()
-
-
-	httpPortServer()
-
-	if config.SecurePort != "" {
-		go httpServer(config.IP+":"+config.SecurePort, true)
-	}
-
-	httpServer(config.IP+":"+config.Port, false)
-}
-
-*/
-func httpsServer() {
+func old_httpsServer() {
 	tlsCfg := &tls.Config{}
 	for _, cfg := range config.GetAllHTTPSServer() {
 		certPath := path.Join(config.CertsPath, cfg.Domain+"_bundle.crt")
@@ -264,7 +411,6 @@ func handleHTTPClient(clientConn net.Conn) {
 					req.URL.Path = strings.Replace(path, cfg.Prefix, "/", 1)
 				}
 				log.Printf("FUKC : %v", req.URL.Path)
-
 
 				// 连接虚拟主机
 				hostConn, err = net.Dial("tcp", hostAddr)
