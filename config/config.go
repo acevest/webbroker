@@ -21,37 +21,47 @@ var name2port = map[string]string{}
 var virtualHTTPServers = map[string]VirtualServerConfig{}
 var virtualHTTPSServers = map[string]VirtualServerConfig{}
 
-func getVirtualServerConfig(host string, hostCfgs map[string]VirtualServerConfig) (*VirtualServerConfig, error) {
+func GetVirtualHTTPServerAddr(host, path string) (*VirtualServerConfig, error) {
 	host = strings.TrimSpace(host)
-	c, ok := hostCfgs[host]
-	if !ok {
-		for k, v := range hostCfgs {
-			if len(k) < len(host) {
-				if host[len(host)-len(k):] == k {
-					return &v, nil
-				}
-			}
+	var cfg *VirtualServerConfig
+	for _, c := range conf.HTTPServers {
+		log.Printf("http: %v\n", c)
+		log.Printf("a:%v b:%v c:%v d:%v", host, path, c.Domain, c.Prefix)
+		if host == c.Domain && len(c.Prefix) == 0 {
+			cfg = &c
+			// no break
+		} else if host == c.Domain && len(c.Prefix) > 0 && strings.HasPrefix(path, c.Prefix) {
+			log.Printf("has prefix %v %v", path, c.Prefix)
+			cfg = &c
+			break
 		}
-		return nil, fmt.Errorf("can not find %v", host)
 	}
 
-	return &c, nil
+	return cfg, nil
+
 }
 
-func GetVirtualHTTPServerAddr(host string) (string, bool, error) {
-	cfg, err := getVirtualServerConfig(host, virtualHTTPServers)
-	if cfg == nil || err != nil {
-		return "", false, err
+func GetVirtualHTTPSServerAddr(host, path string) (*VirtualServerConfig, error) {
+	host = strings.TrimSpace(host)
+	var cfg VirtualServerConfig
+	for _, c := range conf.HTTPSServers {
+		log.Printf("http: %v\n", c)
+		log.Printf("a:%v b:%v c:%v d:%v %v", host, path, c.Domain, c.Prefix, len(c.Prefix))
+		if host == c.Domain && len(c.Prefix) == 0 {
+			log.Printf("A")
+			cfg = c
+			// no break
+		} else if host == c.Domain && len(c.Prefix) > 0 && strings.HasPrefix(path, c.Prefix) {
+			log.Printf("B")
+			log.Printf("has prefix %v %v", path, c.Prefix)
+			cfg = c
+			break
+		}
 	}
-	return cfg.Addr(), cfg.SecureMode, err
-}
 
-func GetVirtualHTTPSServerAddr(host string) (string, bool, error) {
-	cfg, err := getVirtualServerConfig(host, virtualHTTPSServers)
-	if cfg == nil || err != nil {
-		return "", false, err
-	}
-	return cfg.Addr(), cfg.SecureMode, err
+	log.Printf("choose %v", cfg)
+	return &cfg, nil
+	//return nil, fmt.Errorf("can not find %v", host)
 }
 
 func GetAllHTTPSServer() []VirtualServerConfig {
@@ -93,7 +103,7 @@ func buildConfig(cfg *Config) {
 	}
 
 	for _, cfg := range cfg.HTTPServers {
-		log.Printf("http: %v\n", cfg)
+		log.Printf(">http: %v\n", cfg)
 		virtualHTTPServers[cfg.Domain] = cfg
 	}
 	for _, cfg := range cfg.HTTPSServers {
@@ -102,3 +112,4 @@ func buildConfig(cfg *Config) {
 	}
 
 }
+

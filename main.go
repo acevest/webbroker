@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 	"webbroker/config"
+	"strings"
 )
 
 func main() {
@@ -238,20 +239,32 @@ func handleHTTPClient(clientConn net.Conn) {
 			buffer := bytes.NewBuffer(make([]byte, 0, maxBufferSize))
 			if len(host) == 0 {
 				host = req.Host
-				log.Printf("host:   %v", host)
+				path := req.URL.Path
 
 				// 找出虚拟主机地址
 				var hostAddr string
 				var secureMode bool
+				var cfg *config.VirtualServerConfig
 				if _, ok := clientConn.(*tls.Conn); ok {
-					hostAddr, secureMode, err = config.GetVirtualHTTPSServerAddr(host)
+					cfg, err = config.GetVirtualHTTPSServerAddr(host, path)
 				} else {
-					hostAddr, secureMode, err = config.GetVirtualHTTPServerAddr(host)
+					cfg, err = config.GetVirtualHTTPSServerAddr(host, path)
 				}
 				if err != nil {
 					log.Printf("err: unsupport host %v, err: %v", host, err)
 					return
 				}
+
+				hostAddr = cfg.Addr()
+				secureMode = cfg.SecureMode
+
+				log.Printf("host:   %v", host)
+				log.Printf("FUKC : %v", path)
+				if len(cfg.Prefix) > 0 {
+					req.URL.Path = strings.Replace(path, cfg.Prefix, "/", 1)
+				}
+				log.Printf("FUKC : %v", req.URL.Path)
+
 
 				// 连接虚拟主机
 				hostConn, err = net.Dial("tcp", hostAddr)

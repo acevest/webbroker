@@ -16,7 +16,6 @@ type Config struct {
 	HTTPSServers []VirtualServerConfig `yaml:"https"`
 }
 
-//
 type GeneralConfig struct {
 	CertsPath  string     `yaml:"certspath"`
 	IP         string     `yaml:"ip"`
@@ -38,6 +37,7 @@ type VirtualServerConfig struct {
 	Port       string `yaml:"port"`
 	Cert       string `yaml:"cert"`
 	Key        string `yaml:"key"`
+	Prefix     string `yaml:"prefix"`
 	SecureMode bool   `yaml:"securemode"`
 }
 
@@ -64,20 +64,22 @@ func (c *VirtualServerConfig) Addr() string {
 	return host + ":" + port
 }
 
+var conf = &Config{}
+
 // Read read config
 func Read(path string) error {
 
-	var cfg = &Config{}
 	fd, err := os.Open(path)
 
 	if err != nil {
 		return err
 	}
 
-	yaml.NewDecoder(fd).Decode(cfg)
-	log.Printf("%v", cfg)
+	yaml.NewDecoder(fd).Decode(conf)
+	log.Printf("%v", conf)
 
-	buildConfig(cfg)
+	buildConfig(conf)
 
 	return nil
 }
+
